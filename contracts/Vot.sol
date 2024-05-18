@@ -1,55 +1,65 @@
 // SPDX-License-Identifier: MIT 
 pragma solidity ^0.8.0;
 
+import "./Candidat.sol";
+import "./JetonERC20.sol";
+
 contract Vot {
 
-  // Structură pentru a stoca datele alegătorilor
   struct Alegator {
     address adresa;
     bool aVotat;
   }
 
-  // Maparea alegătorilor la datele lor
-  mapping(address => Alegator) public alegatori;
+  mapping(address => Alegator) alegatori;
+  mapping(string => address) adreseAlegatori;
 
-  // Eveniment pentru a notifica emiterea unui buletin de vot
-  event BuletinDeVotEmis(address alegator, uint256 candidat);
+  address ownerAddress;
+  JetonERC20 jeton;
+  Candidat candidat;
 
-  // Modificator pentru a verifica dacă alegătorul nu a votat deja
+  constructor(address _ownerAddress, address _contractCandidat, address _jetonContract) {
+    ownerAddress =_ownerAddress;
+    candidat = Candidat(_contractCandidat);
+    jeton = JetonERC20(_jetonContract);
+  }
+
+  event aVotatCandidatul(address alegator, string candidat);
+
   modifier nuAvotat(address _adresa) {
     require(!alegatori[_adresa].aVotat, "Ai votat deja");
     _;
   }
 
-  // Variabilă pentru taxa de vot
-  uint256 public taxaVot;
+  function getOwner() public view returns (address) {
+        return ownerAddress;
+    }
 
-  // Adresa pentru plata taxei de vot
-  address public adresaPlata;
+  function inscrieAlegator(string memory nume) external {
+    require(adreseAlegatori[nume] == address(0), "Te-ai inscris deja ca alegator!");
+    require(alegatori[msg.sender].adresa == address(0), "Te-ai inscris deja ca alegator!");
 
-  // Constructor pentru a seta taxa inițială și adresa de plată (numai proprietar)
-  constructor(uint256 _taxaVot, address _adresaPlata) {
-    taxaVot = _taxaVot;
-    adresaPlata = _adresaPlata;
-  }
-
-  // Funcție pentru înregistrarea unui alegător
-  function inregistreazaAlegator() public {
     alegatori[msg.sender] = Alegator({adresa: msg.sender, aVotat: false});
+    adreseAlegatori[nume] = msg.sender;
   }
 
-  // Funcție pentru a emite un buletin de vot
-  function voteaza(uint256 _candidat) public nuAvotat(msg.sender) payable {
-    require(msg.value >= taxaVot, "Fonduri insuficiente pentru vot");
-    alegatori[msg.sender].aVotat = true;
-    emit BuletinDeVotEmis(msg.sender, _candidat);
-    // Transferă taxa către adresa de plată
-    payable(adresaPlata).transfer(taxaVot);
+  function daDreptVot(string memory nume) external {
+    require(msg.sender == ownerAddress, "Nu aveti voie sa dati drept de vot");
+    jeton.transfer(adreseAlegatori[nume], 1);
   }
 
-  // Funcție de vizualizare pentru a verifica dacă un alegător a votat
+  function voteaza(string memory  _numeCandidat) external nuAvotat(msg.sender) {
+        require(alegatori[msg.sender].adresa != address(0), "Nu esti inscris ca alegator!");
+
+        candidat.incrementeazaVoturi(_numeCandidat);
+        alegatori[msg.sender].aVotat = true;
+
+        jeton.transfer(ownerAddress, 1);
+
+        emit aVotatCandidatul(msg.sender, _numeCandidat);
+    }
+
   function aVotat(address _adresa) public view returns (bool) {
     return alegatori[_adresa].aVotat;
   }
-
 }
